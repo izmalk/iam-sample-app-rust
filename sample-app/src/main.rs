@@ -53,10 +53,10 @@ fn main() {
         let tx2 = session.transaction(TransactionType::Read).expect("Failed to open a transaction."); //Re-using a same session to open a new transaction
             let read_query = "match $u isa user; get $u; count;";
             let count = tx2.query().get_aggregate(&read_query).resolve().expect("Failed to get query results.").unwrap();
-            if unwrap_value_long(count) == 3 {
+            if unwrap_value_long(count.clone()) == 3 {
                 println!("Database setup complete. Test passed.");
             } else {
-                println!("Test failed with the following result: expected result: 3.");
+                println!("Test failed with the following result: {} expected result: 3.", unwrap_value_long(count).to_string());
                 exit(1)
             }
             tx2.force_close();
@@ -146,7 +146,8 @@ fn main() {
         println!();
         println!("Request #4: Add a new file and a view access to it");
         let tx = session.transaction(TransactionType::Write).expect("Failed to open a transaction."); //Open a transaction to write
-            let filename = format!("{}{}", "logs/", Utc::now().to_string());
+            let timestamp = Utc::now().format("%Y-%m-%d-%H-%M-%S").to_string();
+            let filename = format!("{}{}{}", "logs/", timestamp,".log");
             let typeql_insert_query = format!("insert $f isa file, has path '{}';", filename);
             let _query_response: Vec<Result<typedb_driver::answer::ConceptMap, typedb_driver::Error>> = tx.query().insert(&typeql_insert_query).expect("Failed to read data.").collect(); //Inserting file
             println!("Inserted file: {}", filename);
