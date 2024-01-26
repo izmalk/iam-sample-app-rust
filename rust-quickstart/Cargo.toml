@@ -1,5 +1,5 @@
 [package]
-name = "async-app"
+name = "rust-quickstart"
 version = "0.1.0"
 edition = "2021"
 
@@ -7,6 +7,4 @@ edition = "2021"
 
 [dependencies]
 serde_json = "1.0.111"
-# tokio-stream = "0.1.14"
-# tokio_stream = "0.1.11"
-typedb-driver = "2.26.5"
+typedb-driver = { version = "2.26.5", features = ["sync"] }
