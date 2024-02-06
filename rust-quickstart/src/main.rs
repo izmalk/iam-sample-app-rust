@@ -1,4 +1,5 @@
 use typedb_driver::{
+    concept::{Attribute, Concept, Value},
     Connection, DatabaseManager, Error, Promise, Session, SessionType, TransactionType,
 };
 
@@ -22,8 +23,21 @@ fn main() -> Result<(), Error> {
         let session = Session::new(databases.get(DB_NAME)?, SessionType::Data)?;
         {
             let tx = session.transaction(TransactionType::Write)?;
-            let _ = tx.query().insert("insert $p isa person, has name 'Alice';")?;
+            let a = tx.query().insert("insert $p isa person, has name 'Alice';")?;
             let _ = tx.query().insert("insert $p isa person, has name 'Bob';")?;
+            let mut counter = 0;
+            for item in a {
+                let concept = item.unwrap().map.get("_1").unwrap().clone();
+                let string = match concept {
+                    Concept::Attribute(Attribute {
+                        value: Value::String(value),
+                        ..
+                    }) => value,
+                    _ => unreachable!(),
+                };
+                counter += 1;
+                println!("Result #{}: {}", counter, string);
+            }
             tx.commit().resolve()?;
         }
         {
