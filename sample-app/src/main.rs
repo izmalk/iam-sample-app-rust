@@ -240,19 +240,16 @@ fn queries(driver: Connection, db_name: String) -> Result<(), Box<dyn Error>> {
 fn main() -> Result<(), Box<dyn Error>> {
     println!("Sample App");
     let driver = Connection::new_core(SERVER_ADDR)?;
-    let setup = match setup::db_setup(driver.clone(), DB_NAME.to_owned()) {
-        Ok(()) => queries(driver, DB_NAME.to_owned()),
+    match setup::db_setup(driver.clone(), DB_NAME.to_owned()) {
+        Ok(()) => match queries(driver, DB_NAME.to_owned()) {
+            Ok(_) => {
+                println!("Success: Program complete!");
+                return Ok(());
+            }
+            Err(x) => return Err(x),
+        },
         Err(_) => return Err(Box::new(TypeDBError::Other("DB setup failed.".to_string()))),
     };
-    let result = match setup {
-        Ok(_) => {
-            println!("Success: Program complete!");
-            return Ok(());
-        }
-        Err(x) => Err(x),
-    };
-
-    return result;
 }
 
 fn unwrap_string(concept: Concept) -> String {
