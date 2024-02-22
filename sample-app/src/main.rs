@@ -4,6 +4,9 @@ use typedb_driver::{
 };
 mod setup;
 
+static DB_NAME: &str = "sample_app_db";
+static SERVER_ADDR: &str = "127.0.0.1:1729";
+
 fn fetch_all_users(driver: Connection, db_name:String) -> Result<Vec<JSON>, Box<dyn Error>> {
     let databases = DatabaseManager::new(driver);
     let session = Session::new(databases.get(db_name)?, SessionType::Data)?;
@@ -189,8 +192,6 @@ fn queries(driver:Connection, db_name:String) -> Result<(), Box<dyn Error>> {
 
 
 fn main() -> Result<(), Box<dyn Error>> {
-    static DB_NAME: &str = "sample_app_db";
-    static SERVER_ADDR: &str = "127.0.0.1:1729";
     println!("Sample App");
     let driver = Connection::new_core(SERVER_ADDR)?;
     let setup = match setup::db_setup(driver.clone(), DB_NAME.to_owned()) {
