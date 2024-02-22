@@ -81,14 +81,14 @@ fn get_files_by_user(
             .query()
             .get(&format!(
                 "match
-                                                $fn == '{}';
-                                                $u isa user, has full-name $fn;
-                                                $p($u, $pa) isa permission;
-                                                $o isa object, has path $fp;
-                                                $pa($o, $va) isa access;
-                                                $va isa action, has name 'view_file';
-                                                get $fp; sort $fp asc;
-                                                ",
+                $fn == '{}';
+                $u isa user, has full-name $fn;
+                $p($u, $pa) isa permission;
+                $o isa object, has path $fp;
+                $pa($o, $va) isa access;
+                $va isa action, has name 'view_file';
+                get $fp; sort $fp asc;
+                ",
                 name
             ))?
             .map(|x| x.unwrap())
@@ -100,14 +100,14 @@ fn get_files_by_user(
             .query()
             .get(&format!(
                 "match
-                                                $fn contains '{}';
-                                                $u isa user, has full-name $fn;
-                                                $p($u, $pa) isa permission;
-                                                $o isa object, has path $fp;
-                                                $pa($o, $va) isa access;
-                                                $va isa action, has name 'view_file';
-                                                get $fp; sort $fp asc;
-                                                ",
+                $fn contains '{}';
+                $u isa user, has full-name $fn;
+                $p($u, $pa) isa permission;
+                $o isa object, has path $fp;
+                $pa($o, $va) isa access;
+                $va isa action, has name 'view_file';
+                get $fp; sort $fp asc;
+                ",
                 name
             ))?
             .map(|x| x.unwrap())
@@ -136,13 +136,13 @@ fn update_filepath(
         .query()
         .update(&format!(
             "match
-                                                                        $f isa file, has path $old_path;
-                                                                        $old_path = '{old}';
-                                                                        delete
-                                                                        $f has $old_path;
-                                                                        insert
-                                                                        $f has path $new_path;
-                                                                        $new_path = '{new}';",
+            $f isa file, has path $old_path;
+            $old_path = '{old}';
+            delete
+            $f has $old_path;
+            insert
+            $f has path $new_path;
+            $new_path = '{new}';",
             old = old_path,
             new = new_path
         ))?
@@ -168,8 +168,8 @@ fn delete_file(driver: Connection, db_name: String, path: &str) -> Result<(), Bo
         .query()
         .get(&format!(
             "match
-                                                    $f isa file, has path '{}';
-                                                    get;",
+            $f isa file, has path '{}';
+            get;",
             path
         ))?
         .map(|x| x.unwrap())
@@ -179,10 +179,10 @@ fn delete_file(driver: Connection, db_name: String, path: &str) -> Result<(), Bo
             .query()
             .delete(&format!(
                 "match
-                                                                            $f isa file, has path '{path}';
-                                                                            delete
-                                                                            $f isa file;
-                                                                            "
+                $f isa file, has path '{path}';
+                delete
+                $f isa file;
+                "
             ))
             .resolve();
         match response {
