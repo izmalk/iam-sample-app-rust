@@ -1,5 +1,5 @@
 use typedb_driver::{
-    answer::ConceptMap, concept::{Attribute, Concept, Value}, error, Connection, DatabaseManager, Error as TypeDBError, Options, Promise, Session, SessionType, TransactionType
+concept::Value, Connection, DatabaseManager, Error as TypeDBError, Promise, Session, SessionType, TransactionType
 };
 
 use std::{error::Error, fs};

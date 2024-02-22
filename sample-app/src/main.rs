@@ -1,8 +1,7 @@
 use std::error::Error;
 use typedb_driver::{
-    answer::{ConceptMap, JSON}, concept::{Attribute, Concept, Value}, Connection, DatabaseManager, Error as TypeDBError, Options, Session, SessionType, TransactionType
+    answer::{ConceptMap, JSON}, concept::{Attribute, Concept, Value}, Connection, DatabaseManager, Error as TypeDBError, Options, Promise, Session, SessionType, TransactionType
 };
-//use serde_json::json;
 mod setup;
 
 fn fetch_all_users(driver: Connection, db_name:String) -> Result<Vec<JSON>, Box<dyn Error>> {
@@ -35,10 +34,8 @@ fn insert_new_user(driver: Connection, db_name:String, new_name:&str, new_email:
     let session = Session::new(databases.get(db_name)?, SessionType::Data)?;
     let tx = session.transaction(TransactionType::Write)?;
     let iterator = tx.query().insert(&format!("insert $p isa person, has full-name $fn, has email $e; $fn == '{}'; $e == '{}';", new_name, new_email))?;
-    let mut count = 0;
     let mut result = vec![];
     for item in iterator {
-        count += 1;
         let concept_map = item?;
         let name = unwrap_string(concept_map.get("fn").unwrap().clone());
         let email = unwrap_string(concept_map.get("e").unwrap().clone());
@@ -63,7 +60,7 @@ fn get_files_by_user(driver: Connection, db_name:String, name:&str, inference:bo
     let tx = session.transaction_with_options(TransactionType::Read, Options::new().infer(inference))?;
     //let users = tx.query().get(&format!("match $u isa user, has full-name '{}'; get;", name))?.map(|x| x.unwrap().get("_0").unwrap().clone()).collect::<Vec<_>>();
     let users = tx.query().get(&format!("match $u isa user, has full-name '{}'; get;", name))?.map(|x| x.unwrap()).collect::<Vec<_>>();
-    let mut response;
+    let response;
     if users.len() > 1 {
         return Err(Box::new(TypeDBError::Other("Found more than one user with that name.".to_string())));
     }
@@ -99,6 +96,58 @@ fn get_files_by_user(driver: Connection, db_name:String, name:&str, inference:bo
     return Ok(response);
 }
 
+fn update_filepath(driver:Connection, db_name:String, old_path:&str, new_path:&str) -> Result<Vec<ConceptMap>, Box<dyn Error>> {
+    let databases = DatabaseManager::new(driver);
+    let session = Session::new(databases.get(db_name)?, SessionType::Data)?;
+    let tx = session.transaction(TransactionType::Write)?;
+    let response = tx.query().update(&format!("match
+                                                                        $f isa file, has path $old_path;
+                                                                        $old_path = '{old}';
+                                                                        delete
+                                                                        $f has $old_path;
+                                                                        insert
+                                                                        $f has path $new_path;
+                                                                        $new_path = '{new}';", old=old_path, new=new_path))?.map(|x| x.unwrap()).collect::<Vec<_>>();
+    if response.len() > 0 {
+        let _ = tx.commit().resolve();
+        println!("Total number of paths updated: {}", response.len());
+        return Ok(response);
+    }
+    else if response.len() == 0 {
+        println!("No matched paths: nothing to update");
+        return Ok(response);
+    }
+    else {
+        return Err(Box::new(TypeDBError::Other("Impossible query response.".to_string())));
+    }
+}
+
+fn delete_file(driver: Connection, db_name:String, path:&str) -> Result<(), Box<dyn Error>> {
+    let databases = DatabaseManager::new(driver);
+    let session = Session::new(databases.get(db_name)?, SessionType::Data)?;
+    let tx = session.transaction(TransactionType::Write)?;
+    let files = tx.query().get(&format!("match
+                                                    $f isa file, has path '{}';
+                                                    get;", path))?.map(|x| x.unwrap()).collect::<Vec<_>>();
+    if files.len() == 1 {
+        let response = tx.query().delete(&format!("match
+                                                                            $f isa file, has path '{path}';
+                                                                            delete
+                                                                            $f isa file;
+                                                                            ")).resolve();
+        match response {
+            Ok(_) => {
+                println!("File has been deleted.");
+                Ok(())
+            }
+            Err(_) => return Err(Box::new(TypeDBError::Other("Error: Failed to delete.".to_string())))
+        }
+    } 
+    else {
+    return Err(Box::new(TypeDBError::Other(format!("Wrong number of files to delete: {}", files.len()).to_string())));
+}
+    
+}
 
 fn queries(driver:Connection, db_name:String) -> Result<(), Box<dyn Error>> {
     println!("Request 1 of 6: Fetch all users as JSON objects with full names and emails");
@@ -108,7 +157,8 @@ fn queries(driver:Connection, db_name:String) -> Result<(), Box<dyn Error>> {
     let new_name = "Jack Keeper";
     let new_email = "jk@vaticle.com";
     println!("Request 2 of 6: Add a new user with the full-name {} and email {}", new_name, new_email);
-    insert_new_user(driver.clone(), db_name.clone(), new_name, new_email);
+    let new_user = insert_new_user(driver.clone(), db_name.clone(), new_name, new_email);
+    assert!(new_user?.len() == 1);
 
     let infer = false;
     let name = "Kevin Morrison";
@@ -119,217 +169,43 @@ fn queries(driver:Connection, db_name:String) -> Result<(), Box<dyn Error>> {
     let infer = true;
     println!("Request 4 of 6: Find all files that the user {} has access to view (with inference)", name);
     let files = get_files_by_user(driver.clone(), db_name.clone(), name, infer);
-    //assert!(files?.len() == 10);
+    assert!(files?.len() == 10);
 
-    // let old_path = "lzfkn.java";
-    // let new_path = "lzfkn2.java";
-    // print("Request 5 of 6: Update the path of a file from {} to {}", old_path, new_path);
-    // updated_files = update_filepath(driver, old_path, new_path);
+    let old_path = "lzfkn.java";
+    let new_path = "lzfkn2.java";
+    println!("Request 5 of 6: Update the path of a file from {} to {}", old_path, new_path);
+    let updated_files = update_filepath(driver.clone(), db_name.clone(), old_path, new_path);
+    assert!(updated_files?.len() == 1);
 
-    // let path = "lzfkn2.java";
-    // print("Request 6 of 6: Delete the file with path {}", path);
-    // deleted = delete_file(driver, path);
-    // assert!(deleted);
-    
-    match files {
+    let path = "lzfkn2.java";
+    println!("Request 6 of 6: Delete the file with path {}", path);
+    let deleted = delete_file(driver.clone(), db_name.clone(), path);
+     
+    match deleted {
         Ok(_) => return Ok(()),
         Err(_) => return Err(Box::new(TypeDBError::Other("Application terminated unexpectedly".to_string()))),
     };  
-
 }
 
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let DB_NAME: String = "sample_app_db".to_string();
-    let SERVER_ADDR = "127.0.0.1:1729";
+    static DB_NAME: &str = "sample_app_db";
+    static SERVER_ADDR: &str = "127.0.0.1:1729";
     println!("Sample App");
     let driver = Connection::new_core(SERVER_ADDR)?;
-    let setup = match setup::db_setup(driver.clone(), DB_NAME.clone()) {
-        Ok(()) => queries(driver, DB_NAME),
+    let setup = match setup::db_setup(driver.clone(), DB_NAME.to_owned()) {
+        Ok(()) => queries(driver, DB_NAME.to_owned()),
         Err(_) => return Err(Box::new(TypeDBError::Other("DB setup failed.".to_string()))),
     };  
     let result = match setup {
-        Ok(_) => Ok(()),
+        Ok(_) => {
+            println!("Success: Program complete!");
+            return Ok(());
+        }
         Err(x) => Err(x),
     };
 
     return result;
-
-    // const DB_NAME: &str = "iam";
-    // const SERVER_ADDR: &str = "127.0.0.1:1729";
-
-    // println!("IAM Sample App");
-
-    // println!(
-    //     "Attempting to connect to a TypeDB Core server: {}",
-    //     SERVER_ADDR
-    // );
-    // let driver = Connection::new_core(SERVER_ADDR)?; //Connect to TypeDB Core server
-    // let databases = DatabaseManager::new(driver);
-
-    // if databases.contains(DB_NAME)? {
-    //     println!("Found a pre-existing database! Re-creating with the default schema and data...");
-    //     databases.get(DB_NAME)?.delete()?;
-    // }
-    // databases.create(DB_NAME)?;
-    // if databases.contains(DB_NAME)? {
-    //     println!("Empty database created.");
-    // }
-    // {
-    //     println!("Opening a Schema session to define a schema.");
-    //     let db = databases.get(DB_NAME)?;
-    //     let session = Session::new(db, SessionType::Schema)?;
-    //     let tx = session.transaction(TransactionType::Write)?;
-    //     let data = fs::read_to_string("iam-schema.tql")?;
-    //     tx.query().define(&data).resolve()?;
-    //     tx.commit().resolve()?;
-    // }
-    // {
-    //     println!("Opening a Data session to insert data.");
-    //     let db = databases.get(DB_NAME)?;
-    //     let session = Session::new(db, SessionType::Data)?;
-    //     {
-    //         let tx = session.transaction(TransactionType::Write)?;
-    //         let data = fs::read_to_string("iam-data-single-query.tql")?;
-    //         let _ = tx.query().insert(&data)?;
-    //         tx.commit().resolve()?;
-    //     }
-    //     {
-    //         println!("Testing the new database.");
-    //         let tx = session.transaction(TransactionType::Read)?; //Re-using a same session to open a new transaction
-    //         let read_query = "match $u isa user; get $u; count;";
-    //         let count = tx.query().get_aggregate(&read_query).resolve()?.unwrap();
-    //         if unwrap_value_long(count.clone()) == 3 {
-    //             println!("Database setup complete. Test passed.");
-    //         } else {
-    //             println!(
-    //                 "Test failed with the following result: {} expected result: 3.",
-    //                 unwrap_value_long(count).to_string()
-    //             );
-    //             exit(1)
-    //         }
-    //     }
-    // }
-
-    // println!("Commencing sample requests.");
-    // {
-    //     let db = databases.get(DB_NAME)?;
-    //     let session = Session::new(db, SessionType::Data)?;
-
-    //     println!();
-    //     println!("Request #1: User listing.");
-    //     {
-    //         let tx = session.transaction(TransactionType::Read)?;
-    //         let typeql_read_query = "match $u isa user, has full-name $n, has email $e; get;";
-    //         let iterator = tx.query().get(typeql_read_query)?; //Executing the query
-    //         let mut k = 0; // Counter
-    //         for item in iterator {
-    //             //Iterating through results
-    //             k += 1;
-    //             let answer = item.unwrap();
-    //             let name = unwrap_string(answer.map.get("n").unwrap().clone());
-    //             let email = unwrap_string(answer.map.get("e").unwrap().clone());
-    //             println!("User #{}: {}, has E-Mail: {}", k.to_string(), name, email)
-    //         }
-    //         println!("Users found: {}", k.to_string());
-    //     }
-
-    //     println!();
-    //     println!("Request #2: Files that Kevin Morrison has access to");
-    //     {
-    //         let tx = session.transaction(TransactionType::Read)?;
-    //         let typeql_read_query = "match 
-    //         $u isa user, has full-name 'Kevin Morrison'; 
-    //         $p($u, $pa) isa permission; 
-    //         $o isa object, has path $fp; 
-    //         $pa($o, $va) isa access; 
-    //         get $fp;";
-    //         let iterator = tx.query().get(typeql_read_query)?;
-    //         let mut k = 0;
-    //         for item in iterator {
-    //             k += 1;
-    //             let answer = item.unwrap();
-    //             println!(
-    //                 "File #{}: {}",
-    //                 k.to_string(),
-    //                 unwrap_string(answer.map.get("fp").unwrap().clone())
-    //             );
-    //         }
-    //         println!("Files found: {}", k.to_string());
-    //     }
-
-    //     println!();
-    //     println!("Request #3: Files that Kevin Morrison has view access to (with inference)");
-    //     {
-    //         let tx = session
-    //             .transaction_with_options(TransactionType::Read, Options::new().infer(true))?; //Inference enabled
-    //         let typeql_read_query = "match 
-    //         $u isa user, has full-name 'Kevin Morrison'; 
-    //         $p($u, $pa) isa permission; 
-    //         $o isa object, has path $fp; 
-    //         $pa($o, $va) isa access;
-    //         $va isa action, has name 'view_file'; 
-    //         get $fp; 
-    //         sort $fp asc; 
-    //         offset 0; 
-    //         limit 5;"; //Only the first five results
-    //         let iterator = tx.query().get(typeql_read_query)?;
-    //         let mut k = 0;
-    //         for item in iterator {
-    //             k += 1;
-    //             let answer = item.unwrap();
-    //             println!(
-    //                 "File #{}: {}",
-    //                 k.to_string(),
-    //                 unwrap_string(answer.map.get("fp").unwrap().clone())
-    //             );
-    //         }
-    //         let typeql_read_query = "match 
-    //         $u isa user, has full-name 'Kevin Morrison';
-    //         $p($u, $pa) isa permission;
-    //         $o isa object, has path $fp; 
-    //         $pa($o, $va) isa access;
-    //         $va isa action, has name 'view_file'; 
-    //         get $fp; 
-    //         sort $fp asc; 
-    //         offset 5; 
-    //         limit 5;"; //The next five results
-    //         let iterator = tx.query().get(typeql_read_query)?;
-    //         for item in iterator {
-    //             k += 1;
-    //             let answer = item.unwrap();
-    //             println!(
-    //                 "File #{}: {}",
-    //                 k.to_string(),
-    //                 unwrap_string(answer.map.get("fp").unwrap().clone())
-    //             );
-    //         }
-    //         println!("Files found: {}", k.to_string());
-    //     }
-
-    //     println!();
-    //     println!("Request #4: Add a new file and a view access to it");
-    //     {
-    //         let tx = session.transaction(TransactionType::Write)?; //Open a transaction to write
-    //         let timestamp = Utc::now().format("%Y-%m-%d-%H-%M-%S").to_string();
-    //         let filename = format!("{}{}{}", "logs/", timestamp, ".log");
-    //         let typeql_insert_query = format!("insert $f isa file, has path '{}';", filename);
-    //         let _ = tx.query().insert(&typeql_insert_query)?; //Inserting file
-    //         println!("Inserted file: {}", filename);
-    //         let typeql_insert_query = format!(
-    //             "match 
-    //         $f isa file, has path '{}';
-    //         $vav isa action, has name 'view_file';
-    //         insert 
-    //         ($vav, $f) isa access;",
-    //             filename
-    //         );
-    //         let _ = tx.query().insert(&typeql_insert_query)?; //The second query in the same transaction
-    //         println!("Added view access to the file.");
-    //         return tx.commit().resolve();
-    //     }
-    // }
-    Ok({})
 }
 
 fn unwrap_string(concept: Concept) -> String {
@@ -338,13 +214,6 @@ fn unwrap_string(concept: Concept) -> String {
             value: Value::String(value),
             ..
         }) => value,
-        _ => unreachable!(),
-    }
-}
-
-fn unwrap_value_long(value: Value) -> i64 {
-    match value {
-        Value::Long(value) => value,
         _ => unreachable!(),
     }
 }
