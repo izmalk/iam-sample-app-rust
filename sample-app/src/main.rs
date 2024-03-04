@@ -236,15 +236,15 @@ fn queries(driver: Connection, db_name: String) -> Result<(), Box<dyn Error>> {
     };
 }
 // end::queries[]
-// tag::connect[]
+// tag::connection[]
 fn connect_to_typedb(edition: &Edition, addr: &str) -> Result<Connection, typedb_driver::Error> {
     match edition {
         Edition::Core => return Connection::new_core(addr),
         Edition::Cloud => return Connection::new_cloud(&[addr], Credential::with_tls("admin", "password", None)?),
     };
 }
-// end::connect[]
-// tag::create_db[]
+// end::connection[]
+// tag::create_new_db[]
 fn create_new_database(driver: &Connection, db_name: String) -> Result<(), TypeDBError> {
     let databases = DatabaseManager::new(driver.to_owned());
     if databases.contains(&db_name)? {
@@ -258,8 +258,8 @@ fn create_new_database(driver: &Connection, db_name: String) -> Result<(), TypeD
     println!("OK");
     return result;
 }
-// end::create_db[]
-// tag::schema[]
+// end::create_new_db[]
+// tag::db-schema-setup[]
 fn db_schema_setup(schema_session: &Session, schema_file: String) -> Result<(), TypeDBError> {
     let tx = schema_session.transaction(TransactionType::Write)?;
     let data = fs::read_to_string(schema_file)?; // "iam-schema.tql"
@@ -269,8 +269,8 @@ fn db_schema_setup(schema_session: &Session, schema_file: String) -> Result<(), 
     println!("OK");
     return response;
 }
-// end::schema[]
-// tag::data[]
+// end::db-schema-setup[]
+// tag::db-dataset-setup[]
 fn db_dataset_setup(data_session: &Session, data_file: String) -> Result<(), Box<dyn Error>> {
     let tx = data_session.transaction(TransactionType::Write)?;
     let data = fs::read_to_string(data_file)?; // "iam-data-single-query.tql"
@@ -283,8 +283,8 @@ fn db_dataset_setup(data_session: &Session, data_file: String) -> Result<(), Box
         drop(result);
     })
 }
-// end::data[]
-// tag::test[]
+// end::db-dataset-setup[]
+// tag::test-db[]
 fn test_initial_database(data_session: &Session) -> Result<bool, Box<dyn Error>> {
     let tx = data_session.transaction(TransactionType::Write)?;
     let test_query = "match $u isa user; get $u; count;";
@@ -301,8 +301,8 @@ fn test_initial_database(data_session: &Session) -> Result<bool, Box<dyn Error>>
         Err(Box::new(TypeDBError::Other("Test failed. Terminating...".to_string())))
     }
 }
-// end::test[]
-// tag::setup[]
+// end::test-db[]
+// tag::db-setup[]
 pub fn db_setup(driver: Connection, db_name: String) -> Result<(), Box<dyn Error>> {
     println!("Setting up the database: {}", &db_name);
     let _ = create_new_database(&driver, db_name.clone());
@@ -323,7 +323,7 @@ pub fn db_setup(driver: Connection, db_name: String) -> Result<(), Box<dyn Error
         }
     }
 }
-// end::setup[]
+// end::db-setup[]
 // tag::main[]
 fn main() -> Result<(), Box<dyn Error>> {
     println!("Sample App");
