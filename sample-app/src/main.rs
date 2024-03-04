@@ -64,6 +64,7 @@ fn insert_new_user(
         result.push(concept_map);
     }
     if result.len() > 0 {
+        let _ = tx.commit().resolve();
         Ok(result)
     } else {
         Err(Box::new(TypeDBError::Other("Error: No users found in a database.".to_string())))
