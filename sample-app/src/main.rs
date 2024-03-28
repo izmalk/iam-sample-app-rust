@@ -206,7 +206,7 @@ fn queries(driver: Connection, db_name: String) -> Result<(), Box<dyn Error>> {
     assert!(users?.len() == 3);
 
     let new_name = "Jack Keeper";
-    let new_email = "jk@vaticle.com";
+    let new_email = "jk@typedb.com";
     println!("Request 2 of 6: Add a new user with the full-name {} and email {}", new_name, new_email);
     let new_user = insert_new_user(driver.clone(), db_name.clone(), new_name, new_email);
     assert!(new_user?.len() == 1);
@@ -336,14 +336,26 @@ pub fn db_setup(driver: Connection, db_name: String, db_reset: bool) -> Result<b
     println!("Setting up the database: {}", &db_name);
     if databases.contains(&db_name)? {
         if db_reset {
-            let _ = replace_database(&driver, db_name.clone());
+            match replace_database(&driver, db_name.clone()) {
+                Ok(_) => (),
+                Err(e) => {
+                    eprintln!("Error: {:#?}", e);
+                    std::process::exit(1);
+                }
+            }
         } else {
             let mut answer = String::new();
             print!("Found a pre-existing database. Do you want to replace it? (Y/N) ");
             io::Write::flush(&mut io::stdout()).unwrap();
             io::stdin().read_line(&mut answer).expect("Failed to read a line");
             if answer.trim().to_lowercase() == "y" {
-                let _ = replace_database(&driver, db_name.clone());
+                match replace_database(&driver, db_name.clone()) {
+                    Ok(_) => (),
+                    Err(e) => {
+                        eprintln!("Error: {:#?}", e);
+                        std::process::exit(1);
+                    }
+                }
             } else {
                 println!("Reusing an existing database.");
             }
